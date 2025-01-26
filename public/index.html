@@ -18,6 +18,8 @@
         canvas {
             display: block;
             touch-action: none; /* Disable touch scrolling */
+            border: 5px solid #000; /* Black border */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Optional shadow */
         }
         #toolbar {
             position: absolute;
@@ -51,16 +53,17 @@
         <button id="clear-button">Clear All</button>
     </div>
     <canvas id="canvas"></canvas>
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const socket = io();
+        
+        // Replace this URL with your backend deployed URL
+        const socket = io('https://your-app-name.onrender.com'); 
 
         let drawing = false;
         let sessionCode = null;
 
-        // Set canvas size to full screen
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -68,12 +71,10 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas(); // Initialize canvas size
 
-        // Generate or input a session code
         sessionCode = prompt("Enter session code (or create a new one):", Math.random().toString(36).substring(7));
         document.getElementById('session-code').textContent = sessionCode;
         socket.emit('join', sessionCode);
 
-        // Drawing logic
         canvas.addEventListener('mousedown', (e) => startDrawing(e));
         canvas.addEventListener('mouseup', stopDrawing);
         canvas.addEventListener('mousemove', draw);
@@ -86,21 +87,17 @@
             const { x, y } = getCoordinates(e);
             ctx.beginPath();
             ctx.moveTo(x, y);
-
-            // Send the initial drawing point
             socket.emit('draw', { sessionCode, x, y, type: 'start' });
         }
 
         function stopDrawing() {
             drawing = false;
-            ctx.beginPath(); // Reset the path
+            ctx.beginPath(); 
         }
 
         function draw(e) {
             if (!drawing) return;
             const { x, y } = getCoordinates(e);
-
-            // Draw locally
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.strokeStyle = 'black';
@@ -108,8 +105,6 @@
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(x, y);
-
-            // Send drawing data to the server
             socket.emit('draw', { sessionCode, x, y, type: 'draw' });
         }
 
@@ -121,7 +116,6 @@
             };
         }
 
-        // Receive drawing data from the server
         socket.on('draw', ({ x, y, type }) => {
             if (type === 'start') {
                 ctx.beginPath();
@@ -134,12 +128,10 @@
             }
         });
 
-        // Handle "Clear All" command from the server
         socket.on('clear', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
 
-        // Load existing drawing data when joining
         socket.on('load-drawing', (drawingData) => {
             drawingData.forEach(({ x, y, type }) => {
                 if (type === 'start') {
@@ -154,11 +146,10 @@
             });
         });
 
-        // Clear canvas and notify the server
         const clearButton = document.getElementById('clear-button');
         clearButton.addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear local canvas
-            socket.emit('clear', sessionCode); // Notify the server
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            socket.emit('clear', sessionCode); 
         });
     </script>
 </body>
