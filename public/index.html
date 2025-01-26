@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Full-Screen Canvas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        canvas {
+            display: block;
+            touch-action: none; /* Disable touch scrolling */
+        }
+        #toolbar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            background-color: white;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <span>Session Code: <span id="session-code"></span></span>
+        <button id="clear-button">Clear All</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const socket = io();
+
+        let drawing = false;
+        let sessionCode = null;
+
+        // Set canvas size to full screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initialize canvas size
+
+        // Generate or input a session code
+        sessionCode = prompt("Enter session code (or create a new one):", Math.random().toString(36).substring(7));
+        document.getElementById('session-code').textContent = sessionCode;
+        socket.emit('join', sessionCode);
+
+        // Drawing logic
+        canvas.addEventListener('mousedown', (e) => startDrawing(e));
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('touchstart', (e) => startDrawing(e.touches[0]));
+        canvas.addEventListener('touchend', stopDrawing);
+        canvas.addEventListener('touchmove', (e) => draw(e.touches[0]));
+
+        function startDrawing(e) {
+            drawing = true;
+            const { x, y } = getCoordinates(e);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+
+            // Send the initial drawing point
+            socket.emit('draw', { sessionCode, x, y, type: 'start' });
+        }
+
+        function stopDrawing() {
+            drawing = false;
+            ctx.beginPath(); // Reset the path
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            const { x, y } = getCoordinates(e);
+
+            // Draw locally
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+
+            // Send drawing data to the server
+            socket.emit('draw', { sessionCode, x, y, type: 'draw' });
+        }
+
+        function getCoordinates(event) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        // Receive drawing data from the server
+        socket.on('draw', ({ x, y, type }) => {
+            if (type === 'start') {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            } else if (type === 'draw') {
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+        });
+
+        // Handle "Clear All" command from the server
+        socket.on('clear', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // Load existing drawing data when joining
+        socket.on('load-drawing', (drawingData) => {
+            drawingData.forEach(({ x, y, type }) => {
+                if (type === 'start') {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                } else if (type === 'draw') {
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                }
+            });
+        });
+
+        // Clear canvas and notify the server
+        const clearButton = document.getElementById('clear-button');
+        clearButton.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear local canvas
+            socket.emit('clear', sessionCode); // Notify the server
+        });
+    </script>
+</body>
+</html>
