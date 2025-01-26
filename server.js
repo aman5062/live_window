@@ -6,42 +6,36 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Serve static files from the 'public' directory
+// Serve static files (if any)
 app.use(express.static('public'));
 
-const sessions = {}; // To store drawing data for each session
+const sessions = {}; // Store session data
 
 io.on('connection', (socket) => {
     console.log('A user connected');
 
-    // Handle user joining a session
     socket.on('join', (sessionCode) => {
         socket.join(sessionCode);
         console.log(`User joined session: ${sessionCode}`);
 
-        // Send existing drawing data to the new user
         if (sessions[sessionCode]) {
             socket.emit('load-drawing', sessions[sessionCode]);
         }
     });
 
-    // Handle drawing events
     socket.on('draw', ({ sessionCode, x, y, type }) => {
         if (!sessions[sessionCode]) {
             sessions[sessionCode] = [];
         }
         sessions[sessionCode].push({ x, y, type });
-
-        // Broadcast drawing data to others in the session
         socket.to(sessionCode).emit('draw', { x, y, type });
     });
 
-    // Handle "Clear All" events
     socket.on('clear', (sessionCode) => {
         if (sessions[sessionCode]) {
-            sessions[sessionCode] = []; // Clear session data
+            sessions[sessionCode] = [];
         }
-        io.to(sessionCode).emit('clear'); // Notify all users in the session
+        io.to(sessionCode).emit('clear');
     });
 
     socket.on('disconnect', () => {
@@ -49,7 +43,8 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = 3000;
+// Ensure the server listens on the correct port using Render's $PORT environment variable
+const PORT = process.env.PORT || 3000;  // Use process.env.PORT for Render, default to 3000 if local
 server.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
